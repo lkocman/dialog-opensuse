@@ -10,6 +10,9 @@ fi
 $DIALOGCMD --msgbox "Hello openSUSE 🚀" 10 40
 echo $?
 
+$DIALOGCMD --yesno "Continue with migration?" 10 50
+echo "YESNO_EXIT=$?"
+
 CHOICE=$($DIALOGCMD \
   --menu "Pick one" 15 50 5 \
   1 "Tumbleweed" \

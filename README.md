@@ -7,6 +7,7 @@ It is intentionally narrow: the initial target is `opensuse-migration-tool` and 
 ## Supported widgets in v0.1.0
 
 - `--msgbox`
+- `--yesno`
 - `--menu`
 - `--checklist`
 - `--form`
@@ -40,6 +41,20 @@ CHOICE=$(susedialog --clear \
 go build .
 ```
 
+To embed a commit hash for `--version` output:
+
+```bash
+go build -ldflags "-X main.gitCommit=$(git rev-parse --short HEAD)" .
+```
+
 ## Notes
 
 This is not meant to be a full clone of `dialog`. The goal is to provide a polished openSUSE-branded terminal UI for the specific widgets openSUSE tools actually use.
+
+To debug key handling issues, enable key logging:
+
+```bash
+SUSEDIALOG_DEBUG_KEYS=1 ./susedialog --checklist "Select repos" 20 60 10 packman "Multimedia repo" off
+```
+
+This prints received key names to standard error while the dialog is running.

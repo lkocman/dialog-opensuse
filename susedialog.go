@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image/color"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -16,9 +17,13 @@ import (
 
 type mode int
 
+// gitCommit is intended to be injected at build time via -ldflags.
+var gitCommit = "dev"
+
 const (
 	modeNone mode = iota
 	modeMsgBox
+	modeYesNo
 	modeMenu
 	modeChecklist
 	modeForm
@@ -82,8 +87,10 @@ var opensuse = palette{
 type model struct {
 	cfg        config
 	cursor     int
+	choice     int
 	quitting   bool
 	cancelled  bool
+	debugKeys  bool
 	width      int
 	height     int
 	inputs     []textinput.Model
@@ -91,8 +98,13 @@ type model struct {
 	tick       int
 }
 
+func envEnabled(name string) bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv(name)))
+	return v == "1" || v == "true" || v == "yes" || v == "on"
+}
+
 func newModel(cfg config) model {
-	m := model{cfg: cfg}
+	m := model{cfg: cfg, debugKeys: envEnabled("SUSEDIALOG_DEBUG_KEYS")}
 
 	if cfg.Mode == modeForm {
 		m.inputs = make([]textinput.Model, 0, len(cfg.Fields))
@@ -110,6 +122,54 @@ func newModel(cfg config) model {
 	}
 
 	return m
+}
+
+func renderWithBoldMarkers(text string, normalStyle, boldAccentStyle lipgloss.Style) string {
+	if !strings.Contains(text, "**") {
+		return normalStyle.Render(text)
+	}
+
+	parts := strings.Split(text, "**")
+	var b strings.Builder
+	for i, p := range parts {
+		if i%2 == 1 {
+			b.WriteString(boldAccentStyle.Render(p))
+		} else {
+			b.WriteString(normalStyle.Render(p))
+		}
+	}
+
+	return b.String()
+}
+
+func renderRainbowUnderline(length int) string {
+	if length < 12 {
+		length = 12
+	}
+
+	colors := []color.Color{
+		opensuse.GeekoGreen,
+		opensuse.YarrowYellow,
+		opensuse.Orange,
+		opensuse.RadishRed,
+		opensuse.PlumPurple,
+		opensuse.ButterflyBlue,
+		opensuse.TurquoiseTeal,
+		opensuse.BagelBeige,
+		opensuse.GabbroGray,
+		opensuse.MapleMaroon,
+	}
+
+	var b strings.Builder
+	for i := 0; i < length; i++ {
+		idx := (i * len(colors)) / length
+		if idx >= len(colors) {
+			idx = len(colors) - 1
+		}
+		b.WriteString(lipgloss.NewStyle().Foreground(colors[idx]).Bold(true).Render("━"))
+	}
+
+	return b.String()
 }
 
 func (m model) Init() tea.Cmd {
@@ -133,10 +193,36 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		s := msg.String()
+		if m.debugKeys {
+			_, _ = fmt.Fprintf(os.Stderr, "[susedialog debug] key=%q\n", s)
+		}
 
 		switch m.cfg.Mode {
 		case modeMsgBox:
 			switch s {
+			case "enter":
+				m.quitting = true
+				return m, tea.Quit
+			case "esc", "q", "ctrl+c":
+				m.cancelled = true
+				m.quitting = true
+				return m, tea.Quit
+			}
+
+		case modeYesNo:
+			switch s {
+			case "left", "h":
+				m.choice = 0
+			case "right", "l", "tab", "shift+tab":
+				m.choice = 1 - m.choice
+			case "y":
+				m.choice = 0
+				m.quitting = true
+				return m, tea.Quit
+			case "n":
+				m.choice = 1
+				m.quitting = true
+				return m, tea.Quit
 			case "enter":
 				m.quitting = true
 				return m, tea.Quit
@@ -175,7 +261,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.cursor < len(m.cfg.Items)-1 {
 					m.cursor++
 				}
-			case " ":
+			case " ", "space":
 				if len(m.cfg.Items) > 0 {
 					m.cfg.Items[m.cursor].On = !m.cfg.Items[m.cursor].On
 				}
@@ -247,13 +333,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() tea.View {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(opensuse.GeekoGreen)
+		Foreground(opensuse.ButterflyBlue)
+
+	titleAccentStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(opensuse.PlumPurple)
 
 	backtitleStyle := lipgloss.NewStyle().
 		Foreground(opensuse.GabbroGray)
 
 	textStyle := lipgloss.NewStyle().
 		Foreground(opensuse.BagelBeige)
+
+	boldTextStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(opensuse.ButterflyBlue)
 
 	focusedStyle := lipgloss.NewStyle().
 		Foreground(opensuse.GeekoGreen).
@@ -300,18 +394,37 @@ func (m model) View() tea.View {
 	}
 
 	if m.cfg.Title != "" {
-		b.WriteString(titleStyle.Render(m.cfg.Title))
+		b.WriteString(renderWithBoldMarkers(m.cfg.Title, titleStyle, titleAccentStyle))
+		b.WriteString("\n")
+		b.WriteString(renderRainbowUnderline(40))
 		b.WriteString("\n\n")
 	}
 
 	switch m.cfg.Mode {
 	case modeMsgBox:
-		b.WriteString(boxStyle.Render(textStyle.Render(m.cfg.Text)))
+		b.WriteString(boxStyle.Render(renderWithBoldMarkers(m.cfg.Text, textStyle, boldTextStyle)))
 		b.WriteString("\n\n")
 		b.WriteString(helpStyle.Render("Press Enter to continue · Esc to cancel"))
 
+	case modeYesNo:
+		b.WriteString(boxStyle.Render(renderWithBoldMarkers(m.cfg.Text, textStyle, boldTextStyle)))
+		b.WriteString("\n\n")
+
+		yesStyle := mutedStyle
+		noStyle := mutedStyle
+		if m.choice == 0 {
+			yesStyle = focusedStyle
+		} else {
+			noStyle = focusedStyle
+		}
+
+		buttons := fmt.Sprintf("%s   %s", yesStyle.Render("[ Yes ]"), noStyle.Render("[ No ]"))
+		b.WriteString(buttons)
+		b.WriteString("\n\n")
+		b.WriteString(helpStyle.Render("←/→ move · Enter confirm · Esc cancel"))
+
 	case modeMenu:
-		b.WriteString(textStyle.Render(m.cfg.Text))
+		b.WriteString(renderWithBoldMarkers(m.cfg.Text, textStyle, boldTextStyle))
 		b.WriteString("\n\n")
 
 		for i, it := range m.cfg.Items {
@@ -337,7 +450,7 @@ func (m model) View() tea.View {
 		b.WriteString(helpStyle.Render("↑/↓ move · Enter select · Esc cancel"))
 
 	case modeChecklist:
-		b.WriteString(textStyle.Render(m.cfg.Text))
+		b.WriteString(renderWithBoldMarkers(m.cfg.Text, textStyle, boldTextStyle))
 		b.WriteString("\n\n")
 
 		for i, it := range m.cfg.Items {
@@ -377,7 +490,7 @@ func (m model) View() tea.View {
 		b.WriteString(helpStyle.Render("↑/↓ move · Space toggle · Enter confirm · Esc cancel"))
 
 	case modeForm:
-		b.WriteString(textStyle.Render(m.cfg.Text))
+		b.WriteString(renderWithBoldMarkers(m.cfg.Text, textStyle, boldTextStyle))
 		b.WriteString("\n\n")
 
 		for i, f := range m.cfg.Fields {
@@ -390,7 +503,7 @@ func (m model) View() tea.View {
 		b.WriteString(helpStyle.Render("Tab moves focus · Enter confirm · Esc cancel"))
 
 	case modeProgress:
-		b.WriteString(focusedStyle.Render(m.cfg.Text))
+		b.WriteString(renderWithBoldMarkers(m.cfg.Text, focusedStyle, boldTextStyle))
 		b.WriteString("\n\n")
 
 		// Retro 8-bit bar: color follows palette position as progress moves.
@@ -506,6 +619,16 @@ func parseArgs(args []string) (config, error) {
 			cfg.Width, _ = strconv.Atoi(args[i+3])
 			return cfg, nil
 
+		case "--yesno":
+			if i+3 >= len(args) {
+				return cfg, errors.New("invalid --yesno arguments")
+			}
+			cfg.Mode = modeYesNo
+			cfg.Text = args[i+1]
+			cfg.Height, _ = strconv.Atoi(args[i+2])
+			cfg.Width, _ = strconv.Atoi(args[i+3])
+			return cfg, nil
+
 		case "--menu":
 			if i+4 >= len(args) {
 				return cfg, errors.New("invalid --menu arguments")
@@ -603,6 +726,12 @@ func emitResult(m model) int {
 	case modeMsgBox:
 		return 0
 
+	case modeYesNo:
+		if m.choice == 1 {
+			return 1
+		}
+		return 0
+
 	case modeMenu:
 		if len(m.cfg.Items) == 0 {
 			return 1
@@ -634,7 +763,48 @@ func emitResult(m model) int {
 	}
 }
 
+func printVersion() {
+	fmt.Printf("susedialog version %s\n", gitCommit)
+}
+
+func printHelp() {
+	name := filepath.Base(os.Args[0])
+
+	fmt.Printf("susedialog (openSUSE Dialog) version %s\n", gitCommit)
+	fmt.Println("Copyright 2026 openSUSE")
+	fmt.Println("This is free software; see the source for copying conditions.  There is NO")
+	fmt.Println("warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.")
+	fmt.Println()
+	fmt.Println("* Display dialog-like boxes from shell scripts *")
+	fmt.Println()
+	fmt.Printf("Usage: %s <options>\n", name)
+	fmt.Println("where options are common options, followed by one box option")
+	fmt.Println()
+	fmt.Println("Special options:")
+	fmt.Println("  [--help] [--version]")
+	fmt.Println("Common options:")
+	fmt.Println("  [--clear] [--title <title>] [--backtitle <backtitle>]")
+	fmt.Println("Box options:")
+	fmt.Println("  --msgbox     <text> <height> <width>")
+	fmt.Println("  --yesno      <text> <height> <width>")
+	fmt.Println("  --menu       <text> <height> <width> <menu-height> <tag1> <item1>...")
+	fmt.Println("  --checklist  <text> <height> <width> <list-height> <tag1> <item1> <status1>...")
+	fmt.Println("  --form       <text> <height> <width> <form-height> <label1> <l_y1> <l_x1> <item1> <i_y1> <i_x1> <flen1> <ilen1>...")
+	fmt.Println("  --progress   <text> <height> <width> [<percent>]")
+}
+
 func main() {
+	for _, arg := range os.Args[1:] {
+		switch arg {
+		case "-h", "--help":
+			printHelp()
+			os.Exit(0)
+		case "--version":
+			printVersion()
+			os.Exit(0)
+		}
+	}
+
 	cfg, err := parseArgs(os.Args[1:])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
