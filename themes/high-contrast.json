@@ -1,0 +1,15 @@
+{
+  "name": "high-contrast",
+  "palette": {
+    "GeekoGreen": "#00ff00",
+    "YarrowYellow": "#ffff00",
+    "Orange": "#ffb000",
+    "RadishRed": "#ff4040",
+    "PlumPurple": "#ffffff",
+    "ButterflyBlue": "#00ffff",
+    "TurquoiseTeal": "#00d7d7",
+    "BagelBeige": "#ffffff",
+    "GabbroGray": "#d0d0d0",
+    "MapleMaroon": "#000000"
+  }
+}
