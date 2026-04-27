@@ -18,6 +18,10 @@ echo ""
 echo "Theme demo: high-contrast (debug enabled)"
 SUSEDIALOG_DEBUG_THEME=1 $DIALOGCMD --theme high-contrast --msgbox "Theme demo: high-contrast" 10 50
 
+echo ""
+echo "Theme demo: rainbow (debug enabled)"
+SUSEDIALOG_DEBUG_THEME=1 $DIALOGCMD --theme rainbow --msgbox "Theme demo: rainbow" 10 50
+
 $DIALOGCMD --yesno "Continue with migration?" 10 50
 echo "YESNO_EXIT=$?"
 

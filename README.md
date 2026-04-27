@@ -105,6 +105,7 @@ This is not meant to be a full clone of `dialog`. The goal is to provide a polis
 
 - `opensuse` (default)
 - `high-contrast` (accessibility-oriented)
+- `rainbow` (multi-color accents and borders)
 
 Theme selection priority (highest to lowest):
 

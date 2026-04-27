@@ -117,6 +117,19 @@ var highContrast = palette{
 	MapleMaroon:   lipgloss.Color("#000000"),
 }
 
+var rainbow = palette{
+	GeekoGreen:    lipgloss.Color("#42cd42"),
+	YarrowYellow:  lipgloss.Color("#d4cb1b"),
+	Orange:        lipgloss.Color("#f68946"),
+	RadishRed:     lipgloss.Color("#ff5b45"),
+	PlumPurple:    lipgloss.Color("#a498ff"),
+	ButterflyBlue: lipgloss.Color("#00c8ff"),
+	TurquoiseTeal: lipgloss.Color("#20caa3"),
+	BagelBeige:    lipgloss.Color("#fff8ee"),
+	GabbroGray:    lipgloss.Color("#b8aeab"),
+	MapleMaroon:   lipgloss.Color("#301a14"),
+}
+
 //go:embed themes/*.json
 var themeFS embed.FS
 
@@ -297,13 +310,8 @@ func wrapText(text string, width int) string {
 	return strings.Join(wrapped, "\n")
 }
 
-func renderRainbowUnderline(length int) string {
-	p := opensuse
-	if length < 12 {
-		length = 12
-	}
-
-	colors := []color.Color{
+func paletteColors(p palette) []color.Color {
+	return []color.Color{
 		p.GeekoGreen,
 		p.YarrowYellow,
 		p.Orange,
@@ -315,6 +323,14 @@ func renderRainbowUnderline(length int) string {
 		p.GabbroGray,
 		p.MapleMaroon,
 	}
+}
+
+func renderRainbowUnderline(length int, p palette) string {
+	if length < 12 {
+		length = 12
+	}
+
+	colors := paletteColors(p)
 
 	var b strings.Builder
 	for i := 0; i < length; i++ {
@@ -326,6 +342,76 @@ func renderRainbowUnderline(length int) string {
 	}
 
 	return b.String()
+}
+
+func padRightRunes(s string, target int) string {
+	current := len([]rune(s))
+	if current >= target {
+		return s
+	}
+	return s + strings.Repeat(" ", target-current)
+}
+
+func renderRainbowFrame(content string, p palette) string {
+	colors := paletteColors(p)
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 {
+		lines = []string{""}
+	}
+
+	maxWidth := 0
+	for _, line := range lines {
+		if w := len([]rune(line)); w > maxWidth {
+			maxWidth = w
+		}
+	}
+	if maxWidth < 4 {
+		maxWidth = 4
+	}
+
+	horizontal := maxWidth + 2
+
+	renderChar := func(ch string, c color.Color) string {
+		return lipgloss.NewStyle().Foreground(c).Bold(true).Render(ch)
+	}
+
+	var out strings.Builder
+	out.WriteString(renderChar("╭", colors[0]))
+	for i := 0; i < horizontal; i++ {
+		idx := (i * len(colors)) / horizontal
+		if idx >= len(colors) {
+			idx = len(colors) - 1
+		}
+		out.WriteString(renderChar("─", colors[idx]))
+	}
+	out.WriteString(renderChar("╮", colors[len(colors)-1]))
+	out.WriteString("\n")
+
+	for i, line := range lines {
+		left := colors[(i*2)%len(colors)]
+		right := colors[(i*2+1)%len(colors)]
+		out.WriteString(renderChar("│", left))
+		out.WriteString(" ")
+		out.WriteString(padRightRunes(line, maxWidth))
+		out.WriteString(" ")
+		out.WriteString(renderChar("│", right))
+		if i < len(lines)-1 {
+			out.WriteString("\n")
+		}
+	}
+	out.WriteString("\n")
+
+	out.WriteString(renderChar("╰", colors[0]))
+	for i := 0; i < horizontal; i++ {
+		idx := ((horizontal - 1 - i) * len(colors)) / horizontal
+		if idx >= len(colors) {
+			idx = len(colors) - 1
+		}
+		out.WriteString(renderChar("─", colors[idx]))
+	}
+	out.WriteString(renderChar("╯", colors[len(colors)-1]))
+
+	return out.String()
 }
 
 func colorFromHex(v string) (color.Color, error) {
@@ -450,6 +536,7 @@ func loadBundledThemes() map[string]palette {
 	themes := map[string]palette{
 		"opensuse":      opensuse,
 		"high-contrast": highContrast,
+		"rainbow":       rainbow,
 	}
 
 	entries, err := themeFS.ReadDir("themes")
@@ -921,6 +1008,7 @@ func (m model) View() tea.View {
 		p = opensuse
 	}
 	highContrastTheme := strings.EqualFold(m.cfg.Theme, "high-contrast")
+	rainbowTheme := strings.EqualFold(m.cfg.Theme, "rainbow")
 
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
@@ -1024,8 +1112,11 @@ func (m model) View() tea.View {
 		title := normalizeDialogText(m.cfg.Title, m.cfg.NoNLExpand)
 		b.WriteString(renderWithBoldMarkers(title, titleStyle, titleAccentStyle))
 		b.WriteString("\n")
-		// b.WriteString(renderRainbowUnderline(40))
-		b.WriteString(lipgloss.NewStyle().Foreground(p.PlumPurple).Bold(true).Render(strings.Repeat("━", 40)))
+		if rainbowTheme {
+			b.WriteString(renderRainbowUnderline(40, p))
+		} else {
+			b.WriteString(lipgloss.NewStyle().Foreground(p.PlumPurple).Bold(true).Render(strings.Repeat("━", 40)))
+		}
 		b.WriteString("\n\n")
 	}
 
@@ -1033,7 +1124,12 @@ func (m model) View() tea.View {
 
 	switch m.cfg.Mode {
 	case modeMsgBox:
-		b.WriteString(boxStyle.Render(renderWithBoldMarkers(displayText, textStyle, boldTextStyle)))
+		msgBody := renderWithBoldMarkers(displayText, textStyle, boldTextStyle)
+		if rainbowTheme {
+			b.WriteString(renderRainbowFrame(msgBody, p))
+		} else {
+			b.WriteString(boxStyle.Render(msgBody))
+		}
 		b.WriteString("\n\n")
 		b.WriteString(focusedStyle.Render(fmt.Sprintf("[ %s ]", m.cfg.OkLabel)))
 		b.WriteString("\n")
@@ -1145,7 +1241,12 @@ func (m model) View() tea.View {
 		}
 
 	case modeYesNo:
-		b.WriteString(boxStyle.Render(renderWithBoldMarkers(displayText, textStyle, boldTextStyle)))
+		ynBody := renderWithBoldMarkers(displayText, textStyle, boldTextStyle)
+		if rainbowTheme {
+			b.WriteString(renderRainbowFrame(ynBody, p))
+		} else {
+			b.WriteString(boxStyle.Render(ynBody))
+		}
 		b.WriteString("\n\n")
 
 		yesStyle := mutedStyle
