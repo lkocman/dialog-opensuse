@@ -30,10 +30,12 @@ It is intentionally narrow: the initial target is openSUSE system tooling that c
 - `--infobox` (non-blocking, exits immediately with success)
 - `--textbox`
 - `--yesno`
+- `--gauge` (currently mapped to the progress view)
 - `--inputbox`
 - `--passwordbox`
 - `--menu`
 - `--checklist`
+- `--radiolist`
 - `--form`
 - `--mixedform`
 - `--progress`
@@ -44,6 +46,8 @@ It is intentionally narrow: the initial target is openSUSE system tooling that c
 - `--backtitle`
 - `--ok-label`
 - `--cancel-label`
+- `--yes-label`
+- `--no-label`
 - `--exit-label`
 - `--output-fd`
 - `--default-item`
@@ -105,6 +109,30 @@ go build -ldflags "-X main.gitCommit=$(git rev-parse --short HEAD)" .
 ## Notes
 
 This is not meant to be a full clone of `dialog`. The goal is to provide a polished openSUSE-branded terminal UI for the specific widgets openSUSE tools actually use.
+
+Widgets are added in order of practical compatibility value: first the easiest widgets that reuse existing UI building blocks, then widgets that matter for openSUSE tooling and installer flows.
+
+The following `dialog` widgets are intentionally not implemented at the moment:
+
+- `--buildlist`
+- `--calendar`
+- `--dselect`
+- `--editbox`
+- `--fselect`
+- `--inputmenu`
+- `--mixedgauge`
+- `--passwordform`
+- `--pause`
+- `--prgbox`
+- `--programbox`
+- `--progressbox`
+- `--rangebox`
+- `--tailbox`
+- `--tailboxbg`
+- `--timebox`
+- `--treeview`
+
+These widgets are omitted because we do not currently expect openSUSE consumers to need them. If you hit one in real usage, please open an issue and it can be added based on actual demand.
 
 ### UI details
 
