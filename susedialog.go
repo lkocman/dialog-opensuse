@@ -362,7 +362,7 @@ func renderRainbowUnderline(length int, p palette) string {
 }
 
 func padRightRunes(s string, target int) string {
-	current := len([]rune(s))
+	current := lipgloss.Width(s)
 	if current >= target {
 		return s
 	}
@@ -378,7 +378,7 @@ func renderRainbowFrame(content string, p palette) string {
 
 	maxWidth := 0
 	for _, line := range lines {
-		if w := len([]rune(line)); w > maxWidth {
+		if w := lipgloss.Width(line); w > maxWidth {
 			maxWidth = w
 		}
 	}
